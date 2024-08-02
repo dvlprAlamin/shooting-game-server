@@ -214,7 +214,7 @@ io.on('connection', (socket) => {
 
                         if (target.health <= 0) {
                             console.log(`Player ${playerId} is dead`);
-                            io.emit('playerDead', { id: playerId });
+                            io.emit('playerDead', { id: playerId, shooter: socket.id });
                         }
                     }
                 }
