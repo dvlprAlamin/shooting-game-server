@@ -12,10 +12,10 @@ const io = new Server(server, {
 
 const players = {};
 const randomPositions = [
-    { x: -13, y: 4, z: 20 },
-    { x: -8, y: 4, z: 10 },
-    { x: -2, y: 4, z: 5 },
-    { x: -20, y: 4, z: 30 },
+    { x: -13, y: 20, z: 20 },
+    { x: -8, y: 20, z: 10 },
+    { x: -2, y: 20, z: 5 },
+    { x: -20, y: 20, z: 30 },
 ];
 
 const rayIntersectsBox = (rayOrigin, rayDirection, boxMin, boxMax) => {
@@ -53,15 +53,17 @@ const respawnPlayer = (playerId) => {
     players[playerId].health = 100;
     players[playerId].deaths += 1;
 
-    io.to(playerId).emit('respawn', {
-        position: newPosition,
-        health: 100,
-        deaths: players[playerId].deaths,
-    });
+    // io.to(playerId).emit('respawn', {
+    //     position: newPosition,
+    //     health: 100,
+    //     deaths: players[playerId].deaths,
+    // });
 
     io.emit('playerRespawned', {
         id: playerId,
         position: newPosition,
+        health: 100,
+        deaths: players[playerId].deaths,
     });
 };
 
@@ -134,13 +136,16 @@ io.on('connection', (socket) => {
                         if (target.health <= 0) {
                             console.log(`Player ${playerId} is dead`);
                             io.emit('playerDead', { id: playerId, shooter: socket.id });
-                            respawnPlayer(playerId);
                         }
                     }
                 }
             }
         }
     });
+
+    socket.on('respawn', (playerId) => {
+        respawnPlayer(playerId)
+    })
 
     socket.on('disconnect', () => {
         console.log('user disconnected', socket.id);
