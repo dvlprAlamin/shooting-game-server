@@ -30,12 +30,14 @@ const respawnPlayer = (playerId) => {
     players[playerId].position = newPosition;
     players[playerId].health = 100;
     players[playerId].deaths += 1;
+    players[playerId].damagedBy = []; // Reset the damagedBy array on respawn
+
     io.emit('playerRespawned', {
         id: playerId,
         position: newPosition,
         health: 100,
         deaths: players[playerId].deaths,
-        kills: players[playerId].kills
+        kills: players[playerId].kills,
     });
 };
 
@@ -49,7 +51,8 @@ io.on('connection', (socket) => {
         rotation: { x: 0, y: 0, z: 0 },
         health: 100,
         deaths: 0,
-        kills: 0
+        kills: 0,
+        damagedBy: [], // Keep track of bullets that have already damaged this player
     };
 
     // Send the current players to the new player
@@ -62,7 +65,7 @@ io.on('connection', (socket) => {
         rotation: players[socket.id].rotation,
         health: players[socket.id].health,
         deaths: players[socket.id].deaths,
-        kills: players[socket.id].kills
+        kills: players[socket.id].kills,
     });
 
     socket.on('move', (data) => {
@@ -80,7 +83,6 @@ io.on('connection', (socket) => {
     });
 
     socket.on('shoot', (data) => {
-        console.log('Player shot:', socket.id);
         const shooter = players[socket.id];
 
         if (shooter) {
@@ -105,16 +107,17 @@ io.on('connection', (socket) => {
                     const rayDirection = data.direction;
 
                     if (rayIntersectsBox(rayOrigin, rayDirection, boxMin, boxMax)) {
-                        target.health -= 10; // Reduce health by 10 (adjust as needed)
-                        io.to(playerId).emit('hit', { health: target.health });
+                        if (!target.damagedBy.includes(data.bulletId) && target.damagedBy?.length < 10) {
+                            target.damagedBy.push(data.bulletId);
+                            target.health -= 10;
 
-                        if (target.health <= 0) {
-                            console.log(`Player ${playerId} is dead`);
-                            shooter.kills += 1; // Increment kills for the shooter
-                            io.emit('playerDead', { id: playerId, shooter: socket.id });
-                            io.emit('playerKilled', { id: socket.id, kills: shooter.kills });
-                            // players[socket.id].kills += 1;
-                            // io.emit('playerDead', { id: playerId, shooter: socket.id, kills: players[socket.id].kills });
+                            io.to(playerId).emit('hit', { health: target.health });
+
+                            if (target.health <= 0) {
+                                shooter.kills += 1;
+                                io.emit('playerDead', { id: playerId, shooter: socket.id });
+                                io.emit('playerKilled', { id: socket.id, kills: shooter.kills });
+                            }
                         }
                     }
                 }
