@@ -1,6 +1,7 @@
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
+const rayIntersectsBox = require('./utils/rayIntersectsBox');
 
 const app = express();
 const server = http.createServer(app);
@@ -16,66 +17,39 @@ const randomPositions = [
     { x: -8, y: 20, z: 10 },
     { x: -2, y: 20, z: 5 },
     { x: -20, y: 20, z: 30 },
+    { x: 10, y: 20, z: -10 },
+    { x: 15, y: 20, z: 25 },
+    { x: 5, y: 20, z: 15 },
+    { x: -10, y: 20, z: -20 },
 ];
 
-const rayIntersectsBox = (rayOrigin, rayDirection, boxMin, boxMax) => {
-    let tmin = (boxMin.x - rayOrigin.x) / rayDirection.x;
-    let tmax = (boxMax.x - rayOrigin.x) / rayDirection.x;
-
-    if (tmin > tmax) [tmin, tmax] = [tmax, tmin];
-
-    let tymin = (boxMin.y - rayOrigin.y) / rayDirection.y;
-    let tymax = (boxMax.y - rayOrigin.y) / rayDirection.y;
-
-    if (tymin > tymax) [tymin, tymax] = [tymax, tymin];
-
-    if ((tmin > tymax) || (tymin > tmax)) return false;
-
-    if (tymin > tmin) tmin = tymin;
-    if (tymax < tmax) tmax = tymax;
-
-    let tzmin = (boxMin.z - rayOrigin.z) / rayDirection.z;
-    let tzmax = (boxMax.z - rayOrigin.z) / rayDirection.z;
-
-    if (tzmin > tzmax) [tzmin, tzmax] = [tzmax, tzmin];
-
-    if ((tmin > tzmax) || (tzmin > tmax)) return false;
-
-    if (tzmin > tmin) tmin = tzmin;
-    if (tzmax < tmax) tmax = tzmax;
-
-    return tmax > 0;
-};
+const getRandomPosition = () => randomPositions[Math.floor(Math.random() * randomPositions.length)];
 
 const respawnPlayer = (playerId) => {
-    const newPosition = randomPositions[Math.floor(Math.random() * randomPositions.length)];
+    const newPosition = getRandomPosition();
     players[playerId].position = newPosition;
     players[playerId].health = 100;
     players[playerId].deaths += 1;
-
-    // io.to(playerId).emit('respawn', {
-    //     position: newPosition,
-    //     health: 100,
-    //     deaths: players[playerId].deaths,
-    // });
-
     io.emit('playerRespawned', {
         id: playerId,
         position: newPosition,
         health: 100,
         deaths: players[playerId].deaths,
+        kills: players[playerId].kills
     });
 };
 
 io.on('connection', (socket) => {
     console.log('a user connected', socket.id);
 
-    // Add the new player to the players object
+    // Assign a random initial position to the new player
+    const initialPosition = getRandomPosition();
     players[socket.id] = {
-        position: randomPositions[Math.floor(Math.random() * randomPositions.length)],
+        position: initialPosition,
         rotation: { x: 0, y: 0, z: 0 },
         health: 100,
         deaths: 0,
+        kills: 0
     };
 
     // Send the current players to the new player
@@ -88,6 +62,7 @@ io.on('connection', (socket) => {
         rotation: players[socket.id].rotation,
         health: players[socket.id].health,
         deaths: players[socket.id].deaths,
+        kills: players[socket.id].kills
     });
 
     socket.on('move', (data) => {
@@ -135,7 +110,11 @@ io.on('connection', (socket) => {
 
                         if (target.health <= 0) {
                             console.log(`Player ${playerId} is dead`);
+                            shooter.kills += 1; // Increment kills for the shooter
                             io.emit('playerDead', { id: playerId, shooter: socket.id });
+                            io.emit('playerKilled', { id: socket.id, kills: shooter.kills });
+                            // players[socket.id].kills += 1;
+                            // io.emit('playerDead', { id: playerId, shooter: socket.id, kills: players[socket.id].kills });
                         }
                     }
                 }
@@ -144,8 +123,8 @@ io.on('connection', (socket) => {
     });
 
     socket.on('respawn', (playerId) => {
-        respawnPlayer(playerId)
-    })
+        respawnPlayer(playerId);
+    });
 
     socket.on('disconnect', () => {
         console.log('user disconnected', socket.id);
