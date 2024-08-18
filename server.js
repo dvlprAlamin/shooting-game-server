@@ -77,18 +77,47 @@ io.on('connection', (socket) => {
     console.log('a user connected', socket.id);
 
     // Join or create a room
-    socket.on('joinRoom', ({ roomId, playerName, isCreate }) => {
+    socket.on('joinRoom', ({ roomId, playerName, isCreate, duration, playersLimit }) => {
 
         if (!isCreate && !rooms[roomId]) {
-            io.to(socket.id).emit('roomNotExist', { message: "Room not exist!" });
+            io.to(socket.id).emit('notification', { message: "Room not exist!" });
             return
         }
-        socket.join(roomId);
+
         if (!rooms[roomId]) {
             rooms[roomId] = {
-                players: {}
+                players: {},
+                playersLimit,
+                duration: duration * 60
             };
         }
+
+        if (!isCreate && (Number(rooms[roomId].playersLimit) <= Object.keys(rooms[roomId].players)?.length)) {
+            io.to(socket.id).emit('notification', { message: "Room is full!" });
+            return
+        }
+
+        socket.join(roomId);
+
+        // Start the game timer if it's not already running
+        if (!rooms[roomId].timer) {
+            rooms[roomId].timer = setInterval(() => {
+                rooms[roomId].duration -= 1;
+
+                // Broadcast remaining time to all players in the room
+                io.to(roomId).emit('timerUpdate', rooms[roomId].duration);
+
+                if (rooms[roomId].duration <= 0) {
+                    clearInterval(rooms[roomId].timer);
+                    io.to(roomId).emit('gameOver');
+                    // Handle end of game, e.g., determine winner, reset room, etc.
+                }
+            }, 1000);
+        }
+
+
+
+
         io.to(socket.id).emit('joinedRoom', { message: "Joined Room Successful!" });
         const initialPosition = getRandomPosition();
         rooms[roomId].players[socket.id] = {
@@ -184,12 +213,13 @@ io.on('connection', (socket) => {
 
             // Remove the player from the room
             delete rooms[roomId].players[socket.id];
-
+            updateAllPlayersForLeaderboard(roomId)
             // Broadcast the player disconnect to other players in the room
             io.to(roomId).emit('playerDisconnected', socket.id);
 
             // If no players left in the room, remove the room
             if (Object.keys(rooms[roomId].players).length === 0) {
+                clearInterval(rooms[roomId].timer);
                 delete rooms[roomId];
             }
         });
