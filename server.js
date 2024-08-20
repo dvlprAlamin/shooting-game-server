@@ -11,6 +11,10 @@ const io = new Server(server, {
     }
 });
 
+app.get("/activate", (req, res) => {
+    res.send("ok")
+})
+
 const rooms = {}; // To store players by room
 // const randomPositions = [
 //     { x: -13, y: 20, z: 20 },
